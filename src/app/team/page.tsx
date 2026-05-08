@@ -5,10 +5,11 @@ import { PERSONS, DEPARTMENT_COLORS, type Person, type Department } from '@/data
 import { Users, Search, Filter, X, ChevronRight, AlertTriangle, BarChart2 } from 'lucide-react';
 import MemberInlineDetail from './components/MemberInlineDetail';
 import TeamGanttView from './components/TeamGanttView';
+import PersonnelOrgChart from './components/PersonnelOrgChart';
 
 const DEPARTMENTS: Department[] = ['Elektronik', 'Yazılım', 'Mekanik', 'Test', 'Otomasyon', 'Donanım', 'Saha', 'Ürün', 'Lojistik', 'Destek'];
 
-type PageView = 'grid' | 'gantt';
+type PageView = 'grid' | 'gantt' | 'orgchart';
 
 export default function TeamPage() {
   const [search, setSearch] = useState('');
@@ -48,7 +49,7 @@ export default function TeamPage() {
           </div>
           <div className="flex items-center gap-2">
             {/* View toggle */}
-            <div className="flex items-center bg-muted rounded-xl p-1">
+            <div className="flex items-center bg-muted rounded-xl p-1 border border-border">
               <button
                 onClick={() => setPageView('grid')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
@@ -65,58 +66,69 @@ export default function TeamPage() {
               >
                 <BarChart2 size={14} /> Gantt
               </button>
+              <button
+                onClick={() => { setPageView('orgchart'); setSelectedPerson(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  pageView === 'orgchart' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Filter size={14} /> Atama
+              </button>
             </div>
-            <button className="btn-ghost text-sm flex items-center gap-2">
-              <Filter size={14} /> Filtrele
-            </button>
-            <button className="btn-primary text-sm flex items-center gap-2">
-              📊 Rapor Al
-            </button>
           </div>
         </div>
 
-        {/* Department Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {deptGroups.map(({ dept, count, color }) => (
-            <button
-              key={dept}
-              onClick={() => setSelectedDept(selectedDept === dept ? 'Tümü' : dept)}
-              className={`p-3 rounded-xl border text-left transition-all duration-150 hover:scale-[1.02] ${
-                selectedDept === dept ? 'border-current shadow-lg' : 'border-border bg-card hover:bg-muted/30'
-              }`}
-              style={selectedDept === dept ? { borderColor: color, backgroundColor: `${color}15` } : {}}
-            >
-              <div className="w-7 h-7 rounded-lg mb-2 flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
-                <Users size={14} style={{ color }} />
-              </div>
-              <p className="text-lg font-bold tabular-nums" style={{ color }}>{count}</p>
-              <p className="text-xs text-muted-foreground truncate">{dept}</p>
-            </button>
-          ))}
-        </div>
+        {/* ── ORG CHART VIEW ── */}
+        {pageView === 'orgchart' && (
+          <PersonnelOrgChart />
+        )}
 
-        {/* Search & Filter Bar */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="İsim veya unvan ara..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:bg-muted/60 transition-all"
-            />
+        {/* Department Summary Cards — hide in orgchart view */}
+        {pageView !== 'orgchart' && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {deptGroups.map(({ dept, count, color }) => (
+              <button
+                key={dept}
+                onClick={() => setSelectedDept(selectedDept === dept ? 'Tümü' : dept)}
+                className={`p-3 rounded-xl border text-left transition-all duration-150 hover:scale-[1.02] ${
+                  selectedDept === dept ? 'border-current shadow-lg' : 'border-border bg-card hover:bg-muted/30'
+                }`}
+                style={selectedDept === dept ? { borderColor: color, backgroundColor: `${color}15` } : {}}
+              >
+                <div className="w-7 h-7 rounded-lg mb-2 flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+                  <Users size={14} style={{ color }} />
+                </div>
+                <p className="text-lg font-bold tabular-nums" style={{ color }}>{count}</p>
+                <p className="text-xs text-muted-foreground truncate">{dept}</p>
+              </button>
+            ))}
           </div>
-          {selectedDept !== 'Tümü' && (
-            <button
-              onClick={() => setSelectedDept('Tümü')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-            >
-              {selectedDept} <X size={12} />
-            </button>
-          )}
-          <span className="text-xs text-muted-foreground">{filtered.length} kişi</span>
-        </div>
+        )}
+
+        {/* Search & Filter Bar — hide in orgchart view */}
+        {pageView !== 'orgchart' && (
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="İsim veya unvan ara..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:bg-muted/60 transition-all"
+              />
+            </div>
+            {selectedDept !== 'Tümü' && (
+              <button
+                onClick={() => setSelectedDept('Tümü')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+              >
+                {selectedDept} <X size={12} />
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground">{filtered.length} kişi</span>
+          </div>
+        )}
 
         {/* ── GANTT VIEW ── */}
         {pageView === 'gantt' && (

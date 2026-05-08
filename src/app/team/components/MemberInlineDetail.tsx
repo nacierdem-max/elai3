@@ -1,7 +1,8 @@
 'use client';
 import React, { useState } from 'react';
-import { Briefcase, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, FileText, MessageSquare, AlertCircle, Calendar, X } from 'lucide-react';
+import { Briefcase, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, FileText, MessageSquare, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
 import { TASKS, PROJECTS, DEPARTMENT_COLORS, STATUS_COLORS, type Person, type Task } from '@/data/mockData';
+import Link from 'next/link';
 
 interface MemberInlineDetailProps {
   person: Person;
@@ -59,7 +60,17 @@ function TaskRow({ task, deptColor }: { task: Task; deptColor: string }) {
             {task.name}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {project && <span className="text-xs text-primary font-medium truncate max-w-[160px]">{project.name}</span>}
+            {project && (
+              <Link
+                href={`/projects?project=${project.id}`}
+                onClick={e => e.stopPropagation()}
+                className="text-xs text-primary font-medium truncate max-w-[160px] hover:underline flex items-center gap-0.5"
+                title={`${project.name} projesini aç`}
+              >
+                <ExternalLink size={10} className="shrink-0" />
+                {project.name}
+              </Link>
+            )}
             <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${statusColor}18`, color: statusColor }}>{task.status}</span>
             <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${deptColor}15`, color: deptColor }}>{task.priority}</span>
           </div>
