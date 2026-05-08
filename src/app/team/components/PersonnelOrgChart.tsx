@@ -28,6 +28,8 @@ export interface OrgEdge {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 90;
+const H_GAP = 40;   // horizontal gap between nodes
+const V_GAP = 60;   // vertical gap between rows
 
 const ROLE_STYLES: Record<string, { bgClass: string; borderClass: string; shadowClass: string; textClass: string }> = {
   director: {
@@ -69,20 +71,10 @@ function getWirePath(sx: number, sy: number, tx: number, ty: number): string {
   return `M ${sx} ${sy} C ${sx} ${sy + distY}, ${tx} ${ty - distY}, ${tx} ${ty}`;
 }
 
-// ─── Build initial nodes from PERSONS ────────────────────────────────────────
+// ─── Build initial nodes from PERSONS (no overlap layout) ────────────────────
 function buildInitialData(): { nodes: OrgNode[]; edges: OrgEdge[] } {
   const nodes: OrgNode[] = [];
   const edges: OrgEdge[] = [];
-
-  // Top node: Nuh Bey (director)
-  nodes.push({
-    id: 'nuh-bey',
-    name: 'Nuh Bey',
-    role: 'Genel Müdür',
-    type: 'director',
-    x: 2000,
-    y: 80,
-  });
 
   // Group persons by department
   const deptMap: Record<string, typeof PERSONS> = {};
@@ -92,13 +84,36 @@ function buildInitialData(): { nodes: OrgNode[]; edges: OrgEdge[] } {
   });
 
   const departments = Object.keys(deptMap) as Department[];
-  const deptCount = departments.length;
-  const totalWidth = deptCount * 480;
-  const startX = 2000 - totalWidth / 2;
+
+  // Calculate column widths per department (no overlap)
+  // Each dept column width = max staff per row * (NODE_WIDTH + H_GAP)
+  const STAFF_PER_ROW = 3;
+  const deptColWidths = departments.map(dept => {
+    const staffCount = Math.max(0, deptMap[dept].length - 1);
+    const cols = Math.min(staffCount, STAFF_PER_ROW);
+    return Math.max(NODE_WIDTH + H_GAP, cols * (NODE_WIDTH + H_GAP));
+  });
+
+  // Total canvas width
+  const totalWidth = deptColWidths.reduce((a, b) => a + b, 0) + (departments.length - 1) * H_GAP * 2;
+  const canvasStartX = 2000 - totalWidth / 2;
+
+  // Top node: Nuh Bey (director) — centered
+  nodes.push({
+    id: 'nuh-bey',
+    name: 'Nuh Bey',
+    role: 'Genel Müdür',
+    type: 'director',
+    x: 2000 - NODE_WIDTH / 2,
+    y: 80,
+  });
+
+  let cursorX = canvasStartX;
 
   departments.forEach((dept, deptIdx) => {
     const persons = deptMap[dept];
-    const deptX = startX + deptIdx * 480 + 240;
+    const colWidth = deptColWidths[deptIdx];
+    const deptCenterX = cursorX + colWidth / 2;
 
     // Find department leader
     const leader = persons.find(p =>
@@ -111,7 +126,7 @@ function buildInitialData(): { nodes: OrgNode[]; edges: OrgEdge[] } {
       name: leader.name,
       role: `${dept} Lideri`,
       type: 'leader',
-      x: deptX - NODE_WIDTH / 2,
+      x: deptCenterX - NODE_WIDTH / 2,
       y: 280,
       department: dept,
       personId: leader.id,
@@ -120,25 +135,29 @@ function buildInitialData(): { nodes: OrgNode[]; edges: OrgEdge[] } {
     // Edge: Nuh Bey -> dept leader
     edges.push({ id: `e-nuh-${dept}`, source: 'nuh-bey', target: leaderId });
 
-    // Staff nodes
+    // Staff nodes — grid layout, no overlap
     const staffPersons = persons.filter(p => p.id !== leader.id);
-    const staffPerRow = 3;
     staffPersons.forEach((person, idx) => {
-      const col = idx % staffPerRow;
-      const row = Math.floor(idx / staffPerRow);
+      const col = idx % STAFF_PER_ROW;
+      const row = Math.floor(idx / STAFF_PER_ROW);
+      const staffCount = Math.min(staffPersons.length, STAFF_PER_ROW);
+      const rowWidth = staffCount * NODE_WIDTH + (staffCount - 1) * H_GAP;
+      const rowStartX = deptCenterX - rowWidth / 2;
       const nodeId = `staff-${person.id}`;
       nodes.push({
         id: nodeId,
         name: person.name,
         role: person.title,
         type: 'staff',
-        x: deptX - NODE_WIDTH / 2 + (col - 1) * 220,
-        y: 480 + row * 130,
+        x: rowStartX + col * (NODE_WIDTH + H_GAP),
+        y: 280 + NODE_HEIGHT + V_GAP + row * (NODE_HEIGHT + V_GAP),
         department: dept,
         personId: person.id,
       });
       edges.push({ id: `e-${leaderId}-${nodeId}`, source: leaderId, target: nodeId });
     });
+
+    cursorX += colWidth + H_GAP * 2;
   });
 
   return { nodes, edges };
@@ -169,9 +188,34 @@ export default function PersonnelOrgChart() {
     currY: number;
   } | null>(null);
   const [viewportSize, setViewportSize] = useState({ w: 800, h: 600 });
+  // Hover highlight state
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const activePointers = useRef(new Map<number, { x: number; y: number }>());
+
+  // Compute highlighted node ids and edge ids based on hovered node
+  const highlightedNodeIds = useCallback((hovered: string | null): Set<string> => {
+    if (!hovered) return new Set();
+    const connected = new Set<string>([hovered]);
+    edges.forEach(e => {
+      if (e.source === hovered) connected.add(e.target);
+      if (e.target === hovered) connected.add(e.source);
+    });
+    return connected;
+  }, [edges]);
+
+  const highlightedEdgeIds = useCallback((hovered: string | null): Set<string> => {
+    if (!hovered) return new Set();
+    const connected = new Set<string>();
+    edges.forEach(e => {
+      if (e.source === hovered || e.target === hovered) connected.add(e.id);
+    });
+    return connected;
+  }, [edges]);
+
+  const hoveredNodes = hoveredNodeId ? highlightedNodeIds(hoveredNodeId) : new Set<string>();
+  const hoveredEdges = hoveredNodeId ? highlightedEdgeIds(hoveredNodeId) : new Set<string>();
 
   // Init viewport size on client
   useEffect(() => {
@@ -224,8 +268,8 @@ export default function PersonnelOrgChart() {
     const cx = cursorX ?? viewportSize.w / 2;
     const cy = cursorY ?? viewportSize.h / 2;
     setView(prev => {
-      const s = delta > 0 ? 1.2 : 0.8;
-      const newK = Math.min(Math.max(prev.k * s, 0.08), 3);
+      const s = delta > 0 ? 1.15 : 0.87;
+      const newK = Math.min(Math.max(prev.k * s, 0.05), 3);
       const newX = cx - ((cx - prev.x) / prev.k) * newK;
       const newY = cy - ((cy - prev.y) / prev.k) * newK;
       return { k: newK, x: newX, y: newY };
@@ -309,6 +353,7 @@ export default function PersonnelOrgChart() {
   const finishWiring = (e: React.PointerEvent, targetNodeId: string) => {
     e.stopPropagation();
     if (wiring && wiring.source !== targetNodeId) {
+      // Allow multiple parents: only prevent exact duplicate edges
       const exists = edges.some(ed => ed.source === wiring.source && ed.target === targetNodeId);
       if (!exists) {
         setEdges(prev => [...prev, { id: `e_${Date.now()}`, source: wiring.source, target: targetNodeId }]);
@@ -341,6 +386,7 @@ export default function PersonnelOrgChart() {
       setView({ x: rect.width / 2 - 2000 * 0.22, y: 20, k: 0.22 });
     }
     setSelectedIds(new Set());
+    setHoveredNodeId(null);
   };
 
   const fitView = () => {
@@ -349,6 +395,32 @@ export default function PersonnelOrgChart() {
       setView({ x: rect.width / 2 - 2000 * 0.22, y: 20, k: 0.22 });
     }
   };
+
+  // Wheel handler: zoom always (no Ctrl required), prevent page scroll
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!wrapperRef.current) return;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    let cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? -1 : 1;
+    setView(prev => {
+      const s = delta > 0 ? 1.12 : 0.89;
+      const newK = Math.min(Math.max(prev.k * s, 0.05), 3);
+      const newX = cursorX - ((cursorX - prev.x) / prev.k) * newK;
+      const newY = cursorY - ((cursorY - prev.y) / prev.k) * newK;
+      return { k: newK, x: newX, y: newY };
+    });
+  }, []);
+
+  // Attach wheel listener as non-passive to allow preventDefault
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   return (
     <div className="relative w-full rounded-2xl border border-border overflow-hidden bg-slate-50 dark:bg-slate-900" style={{ height: '75vh', minHeight: 520 }}>
@@ -480,10 +552,6 @@ export default function PersonnelOrgChart() {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onPointerLeave={() => { activePointers.current.clear(); setDragNode(null); setWiring(null); }}
-        onWheel={e => {
-          if (e.ctrlKey) { e.preventDefault(); performZoom(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY); }
-          else setView(v => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
-        }}
         style={{ touchAction: 'none' }}
       >
         <div
@@ -508,6 +576,9 @@ export default function PersonnelOrgChart() {
               const ty = tN.y;
               const path = getWirePath(sx, sy, tx, ty);
               const isSel = selectedIds.has(edge.id);
+              const isHighlighted = hoveredEdges.has(edge.id);
+              const isDimmed = hoveredNodeId !== null && !isHighlighted && !isSel;
+
               return (
                 <g
                   key={edge.id}
@@ -518,13 +589,16 @@ export default function PersonnelOrgChart() {
                   <path
                     d={path}
                     fill="none"
-                    stroke={isSel ? '#ef4444' : '#cbd5e1'}
-                    strokeWidth={isSel ? 4 : 2.5}
+                    stroke={
+                      isSel ? '#ef4444' : isHighlighted ?'#3b82f6' : isDimmed ?'#e2e8f0' :'#cbd5e1'
+                    }
+                    strokeWidth={isSel ? 4 : isHighlighted ? 3.5 : 2.5}
                     strokeLinecap="round"
-                    className="transition-colors"
+                    opacity={isDimmed ? 0.25 : 1}
+                    style={{ transition: 'stroke 0.15s, opacity 0.15s, stroke-width 0.15s' }}
                   />
-                  <circle cx={sx} cy={sy} r="4" fill={isSel ? '#ef4444' : '#94a3b8'} />
-                  <circle cx={tx} cy={ty} r="4" fill={isSel ? '#ef4444' : '#94a3b8'} />
+                  <circle cx={sx} cy={sy} r="4" fill={isSel ? '#ef4444' : isHighlighted ? '#3b82f6' : '#94a3b8'} opacity={isDimmed ? 0.25 : 1} />
+                  <circle cx={tx} cy={ty} r="4" fill={isSel ? '#ef4444' : isHighlighted ? '#3b82f6' : '#94a3b8'} opacity={isDimmed ? 0.25 : 1} />
                 </g>
               );
             })}
@@ -545,20 +619,30 @@ export default function PersonnelOrgChart() {
             const style = ROLE_STYLES[node.type] || ROLE_STYLES.staff;
             const IconComponent = ROLE_ICONS[node.type] || User;
             const isSel = selectedIds.has(node.id);
+            const isHovered = node.id === hoveredNodeId;
+            const isConnected = hoveredNodes.has(node.id) && !isHovered;
+            const isDimmed = hoveredNodeId !== null && !hoveredNodes.has(node.id);
             const deptColor = node.department ? DEPARTMENT_COLORS[node.department] : undefined;
 
             return (
               <div
                 key={node.id}
                 data-node-id={node.id}
-                className={`absolute rounded-2xl border-2 flex flex-col select-none transition-shadow group
+                onMouseEnter={() => setHoveredNodeId(node.id)}
+                onMouseLeave={() => setHoveredNodeId(null)}
+                className={`absolute rounded-2xl border-2 flex flex-col select-none group
                   ${style.bgClass} ${style.borderClass}
-                  ${isSel ? 'ring-4 ring-blue-500/60 scale-105 z-50 shadow-2xl' : `z-10 shadow-lg ${style.shadowClass}`}
+                  ${isSel ? 'ring-4 ring-blue-500/60 scale-105 z-50 shadow-2xl' : ''}
+                  ${isHovered ? 'ring-4 ring-blue-400/80 z-50 shadow-2xl scale-105' : ''}
+                  ${isConnected ? 'ring-2 ring-blue-300/60 z-30 shadow-xl' : ''}
+                  ${!isSel && !isHovered ? `z-10 shadow-lg ${style.shadowClass}` : ''}
                 `}
                 style={{
                   transform: `translate(${node.x}px, ${node.y}px)`,
                   width: NODE_WIDTH,
                   height: NODE_HEIGHT,
+                  opacity: isDimmed ? 0.3 : 1,
+                  transition: 'opacity 0.15s, box-shadow 0.15s',
                 }}
               >
                 {/* Dept color accent bar */}
@@ -621,7 +705,7 @@ export default function PersonnelOrgChart() {
           </div>
         ))}
         <div className="h-3 w-px bg-border mx-1" />
-        <span className="text-muted-foreground text-[10px]">Bağlamak için alt noktayı sürükle</span>
+        <span className="text-muted-foreground text-[10px]">Scroll = Zoom · Alt noktayı sürükle = Bağla</span>
       </div>
     </div>
   );
