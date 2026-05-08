@@ -48,7 +48,7 @@ export default function TeamPage() {
           </div>
           <div className="flex items-center gap-2">
             {/* View toggle */}
-            <div className="flex items-center bg-muted rounded-xl p-1">
+            <div className="flex items-center bg-muted rounded-xl p-1 border border-border">
               <button
                 onClick={() => setPageView('grid')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
@@ -66,12 +66,6 @@ export default function TeamPage() {
                 <BarChart2 size={14} /> Gantt
               </button>
             </div>
-            <button className="btn-ghost text-sm flex items-center gap-2">
-              <Filter size={14} /> Filtrele
-            </button>
-            <button className="btn-primary text-sm flex items-center gap-2">
-              📊 Rapor Al
-            </button>
           </div>
         </div>
 

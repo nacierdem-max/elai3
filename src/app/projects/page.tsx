@@ -1,9 +1,10 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { PROJECTS, PERSONS, TASKS, DEPARTMENT_COLORS, type Project, type Department } from '@/data/mockData';
-import { FolderKanban, Search, Filter, ChevronRight, CheckCircle, AlertTriangle, Clock, X, BarChart2, Users } from 'lucide-react';
+import { FolderKanban, Search, ChevronRight, CheckCircle, AlertTriangle, Clock, X, BarChart2, Users, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const STATUS_COLORS: Record<string, string> = {
   Aktif: '#22c55e',
@@ -385,6 +386,7 @@ function PersonTaskView() {
   const [selectedDept, setSelectedDept] = useState<string>('Tümü');
   const [search, setSearch] = useState('');
   const [expandedPerson, setExpandedPerson] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const departments = ['Tümü', 'Elektronik', 'Yazılım', 'Mekanik', 'Test', 'Otomasyon', 'Donanım', 'Saha', 'Ürün', 'Lojistik', 'Destek'];
 
@@ -424,10 +426,11 @@ function PersonTaskView() {
           <button
             key={d}
             onClick={() => setSelectedDept(d)}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 border"
             style={{
-              background: selectedDept === d ? (d === 'Tümü' ? '#0071e3' : DEPARTMENT_COLORS[d as Department] || '#0071e3') : undefined,
-              color: selectedDept === d ? 'white' : undefined,
+              background: selectedDept === d ? (d === 'Tümü' ? '#0071e3' : DEPARTMENT_COLORS[d as Department] || '#0071e3') : 'transparent',
+              color: selectedDept === d ? 'white' : '#6e6e73',
+              borderColor: selectedDept === d ? 'transparent' : '#d2d2d7',
             }}
           >
             {d}
@@ -521,6 +524,10 @@ function PersonTaskView() {
                                 minWidth: 70,
                               }}
                               title={`${task.name} — ${project?.name || ''} (${task.startDate} → ${task.endDate})`}
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (project) setSelectedProject(project);
+                              }}
                             >
                               {/* Avatar on bar */}
                               <div className="w-5 h-5 rounded-full flex items-center justify-center bg-white/20 shrink-0">
@@ -555,7 +562,21 @@ function PersonTaskView() {
                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: taskColor }} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-semibold text-foreground truncate">{task.name}</p>
-                                  <p className="text-xs text-muted-foreground truncate">{project?.name} · {task.startDate} → {task.endDate}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    {project ? (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setSelectedProject(project); }}
+                                        className="text-xs text-primary font-semibold hover:underline flex items-center gap-0.5 truncate max-w-[180px]"
+                                        title={`${project.name} projesini aç`}
+                                      >
+                                        <ExternalLink size={10} className="shrink-0" />
+                                        {project.name}
+                                      </button>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground truncate">—</p>
+                                    )}
+                                    <span className="text-xs text-muted-foreground shrink-0">· {task.startDate} → {task.endDate}</span>
+                                  </div>
                                 </div>
                                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: `${taskColor}20`, color: taskColor }}>{task.status}</span>
                               </div>
@@ -592,6 +613,8 @@ function PersonTaskView() {
           <p className="text-sm">Personel bulunamadı</p>
         </div>
       )}
+
+      {selectedProject && <ProjectModal project={selectedProject} onClose={() => setSelectedProject(null)} />}
     </div>
   );
 }
@@ -712,11 +735,22 @@ function ProjectCardsView({ projects }: { projects: Project[] }) {
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
-export default function ProjectsPage() {
+function ProjectsPageInner() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tümü');
   const [deptFilter, setDeptFilter] = useState<string>('Tümü');
   const [activeTab, setActiveTab] = useState<'cards' | 'gantt' | 'person'>('cards');
+  const searchParams = useSearchParams();
+
+  // Auto-open project from URL param (e.g. ?project=prj-001)
+  const [autoOpenProject, setAutoOpenProject] = useState<Project | null>(null);
+  useEffect(() => {
+    const projectId = searchParams.get('project');
+    if (projectId) {
+      const found = PROJECTS.find(p => p.id === projectId);
+      if (found) setAutoOpenProject(found);
+    }
+  }, [searchParams]);
 
   const statuses = ['Tümü', 'Aktif', 'Kritik', 'Beklemede', 'Tamamlandı'];
   const departments: string[] = ['Tümü', 'Elektronik', 'Yazılım', 'Mekanik', 'Test', 'Otomasyon', 'Donanım', 'Saha', 'Ürün', 'Lojistik', 'Destek'];
@@ -737,14 +771,10 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold text-foreground">Projeler</h1>
             <p className="text-muted-foreground text-sm mt-1">{PROJECTS.length} proje · 2025–2026 Dönemi</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button className="btn-ghost text-sm flex items-center gap-2"><Filter size={14} /> Filtrele</button>
-            <button className="btn-primary text-sm flex items-center gap-2">📊 Rapor Al</button>
-          </div>
         </div>
 
         {/* View tabs */}
-        <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl w-fit">
+        <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl w-fit border border-border">
           {[
             { key: 'cards', label: '📋 Kartlar', icon: FolderKanban },
             { key: 'gantt', label: '📊 Gantt (Proje → Kim)', icon: BarChart2 },
@@ -756,7 +786,7 @@ export default function ProjectsPage() {
               className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-150 ${
                 activeTab === tab.key
                   ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent hover:border-border'
               }`}
             >
               {tab.label}
@@ -772,8 +802,10 @@ export default function ProjectsPage() {
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-                    statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 border ${
+                    statusFilter === s
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                      : 'bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground hover:border-muted-foreground/30'
                   }`}
                 >
                   {s}
@@ -798,11 +830,11 @@ export default function ProjectsPage() {
                 <button
                   key={`dept-filter-${d}`}
                   onClick={() => setDeptFilter(d)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 border"
                   style={{
-                    background: deptFilter === d ? (d === 'Tümü' ? '#0071e3' : DEPARTMENT_COLORS[d as Department]) : '#f5f5f7',
+                    background: deptFilter === d ? (d === 'Tümü' ? '#0071e3' : DEPARTMENT_COLORS[d as Department]) : 'transparent',
                     color: deptFilter === d ? 'white' : '#6e6e73',
-                    border: `1px solid ${deptFilter === d ? 'transparent' : '#e8e8ed'}`,
+                    borderColor: deptFilter === d ? 'transparent' : '#d2d2d7',
                   }}
                 >
                   {d}
@@ -818,6 +850,17 @@ export default function ProjectsPage() {
         {activeTab === 'gantt' && <ProjectGanttView projects={PROJECTS} search={search} statusFilter={statusFilter} deptFilter={deptFilter} />}
         {activeTab === 'person' && <PersonTaskView />}
       </div>
+
+      {/* Auto-open project modal from URL param */}
+      {autoOpenProject && <ProjectModal project={autoOpenProject} onClose={() => setAutoOpenProject(null)} />}
     </AppLayout>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProjectsPageInner />
+    </Suspense>
   );
 }
