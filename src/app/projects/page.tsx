@@ -739,7 +739,7 @@ function ProjectsPageInner() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tümü');
   const [deptFilter, setDeptFilter] = useState<string>('Tümü');
-  const [activeTab, setActiveTab] = useState<'cards' | 'gantt' | 'person'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'gantt' | 'person'>('gantt');
   const searchParams = useSearchParams();
 
   // Auto-open project from URL param (e.g. ?project=prj-001)
